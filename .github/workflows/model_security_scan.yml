@@ -1,0 +1,44 @@
+name: Prisma AIRS Model Security Scan
+
+on:
+  # Allow manual trigger with a URL input
+  workflow_dispatch:
+    inputs:
+      model_url:
+        description: 'Hugging Face Model URL (e.g., https://huggingface.co/bert-base-uncased)'
+        required: true
+        default: 'https://huggingface.co/bert-base-uncased'
+
+jobs:
+  model_security_scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📦 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 🛠️ Install Dependencies
+        run: |
+          pip install pan-modelsecurity
+
+      - name: 🛡️ Run Prisma AIRS Scan
+        env:
+          PRISMA_GROUP_ID: ${{ secrets.PRISMA_SECURITY_GROUP_ID }}
+          # Add API tokens if your specific setup requires them
+        run: |
+          # We pass the input URL directly to the script
+          python model_scan.py \
+            --model-path "${{ inputs.model_url }}" \
+            --security-group-id "$PRISMA_GROUP_ID"
+
+      - name: 📄 Upload Scan Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-scan-report
+          path: model_scan_report.json
