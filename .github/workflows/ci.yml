@@ -47,5 +47,7 @@ jobs:
           venv/bin/python local-scan.py
 
       - name: Run Hugging Face model scan
-        run: |
-          venv/bin/python hf-scan.py --model "$HF_MODEL"
+  run: |
+    venv/bin/python hf-scan.py \
+      --model "${{ inputs.model }}" \
+      --fail-on high
