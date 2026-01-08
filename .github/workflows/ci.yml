@@ -27,6 +27,7 @@ jobs:
           ./set_environment.sh
 
       - name: Run local model scan
+        shell: bash
         run: |
           source venv/bin/activate
           python local-scan.py

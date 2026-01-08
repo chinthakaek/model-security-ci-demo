@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Ensures the script exits immediately if any command fails.
 # The following function is adapted from https://github.com/jansvensen/panw-airs-lab-modelsecurity/blob/main/setup-lab.sh
 # Copyright (c) 2024 jansvensen (MIT License)
