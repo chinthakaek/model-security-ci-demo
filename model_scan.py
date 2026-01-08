@@ -29,7 +29,7 @@ def run_model_scan(model_path: str, security_group_id: str):
     """
     try:
         # 1. Initialize the Client
-        # We use the environment variable for the endpoint, defaulting to the one in your snippet
+        # We use the environment variable for the endpoint, defaulting to the prod URL
         base_url = os.getenv("MODEL_SECURITY_API_ENDPOINT", "https://api.sase.paloaltonetworks.com/aims")
         
         print(f"🚀 Initializing Client connecting to: {base_url}")
@@ -47,7 +47,6 @@ def run_model_scan(model_path: str, security_group_id: str):
         print(f"   Profile UUID: {security_group_id}")
 
         # 3. Perform the scan
-        # Using the exact method from your working snippet
         result = client.scan(
             security_group_uuid=security_group_id,
             model_uri=final_model_uri
@@ -68,41 +67,40 @@ def run_model_scan(model_path: str, security_group_id: str):
         print("   Report saved to 'model_scan_report.json'")
 
         # 5. POLICY ENFORCEMENT (The Gatekeeper)
-        # Fail the pipeline if the outcome is not clean
-        # We check both the high-level outcome AND specific findings
-        
         policy_violated = False
         
-        # Check 1: High level outcome
-        # Adjust "PASS" if the API returns "CLEAN" or similar. Usually it's "PASS" or "FAIL"
-        if str(result.eval_outcome).upper() not in ["PASS", "CLEAN", "SUCCESS"]:
-            print(f"⚠️ Outcome was not PASS: {result.eval_outcome}")
-            # policy_violated = True # Uncomment this if you want to be strict on the label
+        # Check 1: High level outcome (FIXED LOGIC)
+        outcome_str = str(result.eval_outcome).upper()
+        
+        # If the result is NOT strictly 'PASS' or 'CLEAN', we trigger a violation.
+        # This catches 'BLOCKED', 'WARNING', 'FAILURE', etc.
+        if outcome_str not in ["PASS", "CLEAN", "SUCCESS"]:
+            print(f"⚠️  VIOLATION: Outcome was '{outcome_str}' (Expected: PASS)")
+            policy_violated = True 
             
-        # Check 2: Deep dive into findings for errors
+        # Check 2: Deep dive into findings (Double check for critical issues)
         findings = data_dict.get("findings", [])
         if findings:
             print("\n🔍 Detailed Findings:")
             for finding in findings:
-                # pprint.pprint(finding) # Optional: print full details
-                severity = finding.get('severity', 'UNKNOWN')
+                severity = str(finding.get('severity', 'UNKNOWN')).upper()
                 category = finding.get('category', 'Generic')
                 print(f"   - [{severity}] {category}")
                 
-                # Logic: Mark as violation if it's not just an 'INFO' message
-                if severity.upper() in ['CRITICAL', 'HIGH', 'MEDIUM']:
+                # Optional: Fail specifically on High/Critical even if outcome said PASS (Defense in depth)
+                if severity in ['CRITICAL', 'HIGH']:
                     policy_violated = True
 
+        # 6. Exit Code Determination
         if policy_violated:
             print("\n⛔ FAIL: Security violations detected. Stopping pipeline.")
-            sys.exit(1)
+            sys.exit(1) # <--- This makes the GitHub Action turn RED
         else:
             print("\n✅ PASS: Model is secure.")
-            sys.exit(0)
+            sys.exit(0) # <--- This makes the GitHub Action turn GREEN
 
     except Exception as e:
         print(f"\n💥 CRITICAL ERROR: {e}")
-        # Print full trace for debugging
         import traceback
         traceback.print_exc()
         sys.exit(1)
