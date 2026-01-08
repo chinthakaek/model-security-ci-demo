@@ -16,12 +16,15 @@ jobs:
   model_security_scan:
     runs-on: ubuntu-latest
     
-    # MOVED UP: We define these secrets here so the 'Install' step can use them too.
+    # --- SHARED ENVIRONMENT VARIABLES (JOB LEVEL) ---
+    # These are available to ALL steps, including the install script and the python script.
     env:
       MODEL_SECURITY_API_ENDPOINT: ${{ secrets.MODEL_SECURITY_API_ENDPOINT }}
       MODEL_SECURITY_CLIENT_ID: ${{ secrets.MODEL_SECURITY_CLIENT_ID }}
       MODEL_SECURITY_CLIENT_SECRET: ${{ secrets.MODEL_SECURITY_CLIENT_SECRET }}
       TSG_ID: ${{ secrets.TSG_ID }}
+      # Required for some versions of the SDK to find the auth server
+      MODEL_SECURITY_TOKEN_ENDPOINT: https://auth.apps.paloaltonetworks.com/oauth2/access_token
 
     steps:
       - name: 📦 Checkout Repository
@@ -34,32 +37,29 @@ jobs:
 
       - name: 🛠️ Install Dependencies (Dynamic Auth)
         run: |
-          # 1. Install jq (used by your script to parse JSON)
-          # GitHub runners usually have it, but this ensures it.
+          # 1. Install jq (needed to parse the token response)
           sudo apt-get install -y jq
 
-          # 2. Make your script executable
+          # 2. Make the script executable
           chmod +x getPYPIurl.sh
 
-          # 3. Execute the script to get the URL
-          # It automatically reads the env vars defined at the job level above
+          # 3. Run the script to get the secret download URL
           echo "Authenticating to fetch PyPI URL..."
           PIP_INDEX_LINK=$(./getPYPIurl.sh)
 
-          # Check if we actually got a URL back
+          # 4. Verify we got a link
           if [ -z "$PIP_INDEX_LINK" ]; then
-            echo "::error::Failed to retrieve PyPI URL from getPYPIurl.sh"
+            echo "::error::Failed to retrieve PyPI URL. Check your secrets."
             exit 1
           fi
 
-          # 4. Install the client using the dynamic URL
+          # 5. Install the client using the dynamic URL
           echo "Installing model-security-client..."
           pip install --upgrade pip
+          
+          # We use 'model-security-client' because it is the package that successfully installs.
+          # The python script has been updated to handle the import.
           pip install model-security-client --extra-index-url "$PIP_INDEX_LINK"
-
-          # 5. Install other dependencies if needed
-          # (If your python script relies on other libs, install them here)
-          # pip install requests 
 
       - name: 🛡️ Run Prisma AIRS Scan
         run: |

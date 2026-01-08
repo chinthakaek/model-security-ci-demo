@@ -2,7 +2,23 @@ import os
 import sys
 import argparse
 import json
-from pan_modelsecurity import Scanner, AiProfile
+
+# --- IMPORT FIX: Handle package name variations ---
+try:
+    # Try the standard import for 'model-security-client'
+    from model_security import Scanner, AiProfile
+    print("✅ Successfully imported 'model_security'")
+except ImportError:
+    try:
+        # Fallback for older SDK versions
+        from pan_modelsecurity import Scanner, AiProfile
+        print("✅ Successfully imported 'pan_modelsecurity'")
+    except ImportError:
+        print("❌ CRITICAL ERROR: Could not import Scanner.")
+        print("   Installed package is likely 'model-security-client'.")
+        print("   Please ensure your environment has the correct package installed.")
+        sys.exit(1)
+# --------------------------------------------------
 
 def parse_arguments():
     """Parses command-line arguments for model path and security group ID."""
@@ -28,7 +44,7 @@ def run_model_scan(model_path: str, security_group_id: str):
     """
     try:
         # 1. Initialize the Scanner Client
-        # Note: Ensure environment variables (like access keys) are set if required by your specific SDK version
+        # Note: Ensure environment variables (like access keys) are set
         scanner = Scanner()
         ai_profile = AiProfile(profile_name=security_group_id)
         
@@ -61,25 +77,19 @@ def run_model_scan(model_path: str, security_group_id: str):
         print(f"Scan complete. Report saved to {report_filename}")
         
         # 5. Policy Enforcement Check
-        # Iterate through findings to determine if the build should FAIL
         policy_violated = False
-        
-        # The 'findings' list contains specific security issues detected
         findings = scan_response.get("findings", [])
         
         if findings:
             for finding in findings:
-                # You can customize this logic (e.g., only fail on 'Critical' severity)
-                # Here we fail on any error finding
                 error = finding.get("error", "")
                 if error:
                     policy_violated = True
                     print(f"❌ VIOLATION DETECTED: {error}")
-                    # Optional: Print severity or description if available in payload
         
         if policy_violated:
             print("\n⛔ FAIL: Security violations found. Stopping pipeline.")
-            sys.exit(1) # Exit code 1 signals failure to GitHub Actions/Jenkins
+            sys.exit(1) # Exit code 1 signals failure to GitHub Actions
         else:
             print("\n✅ PASS: No security violations detected.")
             sys.exit(0) # Exit code 0 signals success
