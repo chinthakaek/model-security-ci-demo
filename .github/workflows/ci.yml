@@ -4,6 +4,7 @@ on:
   push:
     branches: [ "main" ]
   pull_request:
+  workflow_dispatch:   # allows manual trigger with variables
 
 jobs:
   scan:
@@ -20,20 +21,31 @@ jobs:
 
       - name: Install system tools
         run: sudo apt-get update && sudo apt-get install -y jq
-        
+
       - name: Export Model Security secrets
         run: |
           echo "MODEL_SECURITY_CLIENT_ID=${{ secrets.MODEL_SECURITY_CLIENT_ID }}" >> $GITHUB_ENV
           echo "MODEL_SECURITY_CLIENT_SECRET=${{ secrets.MODEL_SECURITY_CLIENT_SECRET }}" >> $GITHUB_ENV
           echo "TSG_ID=${{ secrets.TSG_ID }}" >> $GITHUB_ENV
 
+      - name: Validate model variable
+        run: |
+          if [ -z "${{ vars.HF_MODEL }}" ]; then
+            echo "❌ HF_MODEL variable is not set"
+            exit 1
+          fi
+          echo "HF_MODEL=${{ vars.HF_MODEL }}" >> $GITHUB_ENV
+
       - name: Prepare environment
+        shell: bash
         run: |
           chmod +x getPYPIurl.sh set_environment.sh
           ./set_environment.sh
 
       - name: Run local model scan
-        shell: bash
         run: |
-          source venv/bin/activate
-          python local-scan.py
+          venv/bin/python local-scan.py
+
+      - name: Run Hugging Face model scan
+        run: |
+          venv/bin/python hf-scan.py --model "$HF_MODEL"
