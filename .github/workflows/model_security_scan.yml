@@ -1,13 +1,16 @@
 name: Prisma AIRS Model Security Scan
 
 on:
-  # Allow manual trigger with a URL input
   workflow_dispatch:
     inputs:
       model_url:
-        description: 'Hugging Face Model URL (e.g., https://huggingface.co/bert-base-uncased)'
+        description: 'Hugging Face Model URL'
         required: true
         default: 'https://huggingface.co/bert-base-uncased'
+      security_profile_id:
+        description: 'The Prisma AIRS Security Profile Name/ID'
+        required: true
+        default: 'Default-Profile' 
 
 jobs:
   model_security_scan:
@@ -23,18 +26,22 @@ jobs:
           python-version: '3.12'
 
       - name: 🛠️ Install Dependencies
+        # Since you don't have a requirements.txt, we install directly here
         run: |
+          pip install --upgrade pip
           pip install pan-modelsecurity
 
       - name: 🛡️ Run Prisma AIRS Scan
+        # THIS IS THE MISSING PART: Mapping your secrets to Environment Variables
         env:
-          PRISMA_GROUP_ID: ${{ secrets.PRISMA_SECURITY_GROUP_ID }}
-          # Add API tokens if your specific setup requires them
+          MODEL_SECURITY_API_ENDPOINT: ${{ secrets.MODEL_SECURITY_API_ENDPOINT }}
+          MODEL_SECURITY_CLIENT_ID: ${{ secrets.MODEL_SECURITY_CLIENT_ID }}
+          MODEL_SECURITY_CLIENT_SECRET: ${{ secrets.MODEL_SECURITY_CLIENT_SECRET }}
+          TSG_ID: ${{ secrets.TSG_ID }}
         run: |
-          # We pass the input URL directly to the script
           python model_scan.py \
             --model-path "${{ inputs.model_url }}" \
-            --security-group-id "$PRISMA_GROUP_ID"
+            --security-group-id "${{ inputs.security_profile_id }}"
 
       - name: 📄 Upload Scan Report
         if: always()
