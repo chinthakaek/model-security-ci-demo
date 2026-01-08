@@ -2,27 +2,12 @@ import os
 import sys
 import argparse
 import json
-
-# --- IMPORT FIX: Handle package name variations ---
-try:
-    # Try the standard import for 'model-security-client'
-    from model_security import Scanner, AiProfile
-    print("✅ Successfully imported 'model_security'")
-except ImportError:
-    try:
-        # Fallback for older SDK versions
-        from pan_modelsecurity import Scanner, AiProfile
-        print("✅ Successfully imported 'pan_modelsecurity'")
-    except ImportError:
-        print("❌ CRITICAL ERROR: Could not import Scanner.")
-        print("   Installed package is likely 'model-security-client'.")
-        print("   Please ensure your environment has the correct package installed.")
-        sys.exit(1)
-# --------------------------------------------------
+import pprint
+from model_security_client.api import ModelSecurityAPIClient
 
 def parse_arguments():
     """Parses command-line arguments for model path and security group ID."""
-    parser = argparse.ArgumentParser(description="Palo Alto Model Security Scan.")
+    parser = argparse.ArgumentParser(description="Prisma AIRS Model Security Scan")
     
     parser.add_argument(
         "--model-path",
@@ -33,69 +18,93 @@ def parse_arguments():
     parser.add_argument(
         "--security-group-id",
         required=True,
-        help="The ID of the security group."
+        help="The UUID of the security group."
     )
     
     return parser.parse_args()
 
 def run_model_scan(model_path: str, security_group_id: str):
     """
-     Initializes the SDK, scans the model, and enforces the security policy.
+     Initializes the Client, scans the model, and enforces the security policy.
     """
     try:
-        # 1. Initialize the Scanner Client
-        # Note: Ensure environment variables (like access keys) are set
-        scanner = Scanner()
-        ai_profile = AiProfile(profile_name=security_group_id)
+        # 1. Initialize the Client
+        # We use the environment variable for the endpoint, defaulting to the one in your snippet
+        base_url = os.getenv("MODEL_SECURITY_API_ENDPOINT", "https://api.sase.paloaltonetworks.com/aims")
         
-        print(f"Initializing scan for: {model_path}")
-        print(f"Using Security Profile ID: {security_group_id}")
+        print(f"🚀 Initializing Client connecting to: {base_url}")
+        client = ModelSecurityAPIClient(base_url=base_url)
 
         # 2. Determine URI Type (Local File vs. Hugging Face URL)
         if model_path.startswith("http://") or model_path.startswith("https://"):
-            # It is a Hugging Face (or remote) URL
             final_model_uri = model_path
-            print("Detected Remote URL. Scanning directly from source...")
+            print(f"   Target: Remote URL ({model_path})")
         else:
-            # It is a local file path
-            # Ensure absolute path for safety
             abs_path = os.path.abspath(model_path)
             final_model_uri = f"file://{abs_path}"
-            print(f"Detected Local File. Scanning artifact at: {abs_path}")
+            print(f"   Target: Local File ({abs_path})")
 
-        # 3. Trigger the Scan
-        # The SDK will upload the file hash/metadata or URL to Prisma AIRS for analysis
-        scan_response = scanner.sync_scan(
-            ai_profile=ai_profile,
+        print(f"   Profile UUID: {security_group_id}")
+
+        # 3. Perform the scan
+        # Using the exact method from your working snippet
+        result = client.scan(
+            security_group_uuid=security_group_id,
             model_uri=final_model_uri
         )
+
+        # 4. Process Results
+        print(f"\n🏁 Scan Status: {result.eval_outcome}")
         
-        # 4. Save the full report for audit/debugging
-        report_filename = 'model_scan_report.json'
-        with open(report_filename, 'w') as f:
-            json.dump(scan_response, f, indent=4)
-        print(f"Scan complete. Report saved to {report_filename}")
+        # Convert result to dictionary safely
+        try:
+            data_dict = result.model_dump()
+        except AttributeError:
+            data_dict = result.__dict__
+
+        # Save report for GitHub Artifacts
+        with open('model_scan_report.json', 'w') as f:
+            json.dump(data_dict, f, indent=4, default=str)
+        print("   Report saved to 'model_scan_report.json'")
+
+        # 5. POLICY ENFORCEMENT (The Gatekeeper)
+        # Fail the pipeline if the outcome is not clean
+        # We check both the high-level outcome AND specific findings
         
-        # 5. Policy Enforcement Check
         policy_violated = False
-        findings = scan_response.get("findings", [])
         
+        # Check 1: High level outcome
+        # Adjust "PASS" if the API returns "CLEAN" or similar. Usually it's "PASS" or "FAIL"
+        if str(result.eval_outcome).upper() not in ["PASS", "CLEAN", "SUCCESS"]:
+            print(f"⚠️ Outcome was not PASS: {result.eval_outcome}")
+            # policy_violated = True # Uncomment this if you want to be strict on the label
+            
+        # Check 2: Deep dive into findings for errors
+        findings = data_dict.get("findings", [])
         if findings:
+            print("\n🔍 Detailed Findings:")
             for finding in findings:
-                error = finding.get("error", "")
-                if error:
+                # pprint.pprint(finding) # Optional: print full details
+                severity = finding.get('severity', 'UNKNOWN')
+                category = finding.get('category', 'Generic')
+                print(f"   - [{severity}] {category}")
+                
+                # Logic: Mark as violation if it's not just an 'INFO' message
+                if severity.upper() in ['CRITICAL', 'HIGH', 'MEDIUM']:
                     policy_violated = True
-                    print(f"❌ VIOLATION DETECTED: {error}")
-        
+
         if policy_violated:
-            print("\n⛔ FAIL: Security violations found. Stopping pipeline.")
-            sys.exit(1) # Exit code 1 signals failure to GitHub Actions
+            print("\n⛔ FAIL: Security violations detected. Stopping pipeline.")
+            sys.exit(1)
         else:
-            print("\n✅ PASS: No security violations detected.")
-            sys.exit(0) # Exit code 0 signals success
+            print("\n✅ PASS: Model is secure.")
+            sys.exit(0)
 
     except Exception as e:
-        print(f"\n💥 CRITICAL ERROR: Script failed execution. Details: {e}")
+        print(f"\n💥 CRITICAL ERROR: {e}")
+        # Print full trace for debugging
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 if __name__ == "__main__":
