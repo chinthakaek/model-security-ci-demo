@@ -16,6 +16,13 @@ jobs:
   model_security_scan:
     runs-on: ubuntu-latest
     
+    # MOVED UP: We define these secrets here so the 'Install' step can use them too.
+    env:
+      MODEL_SECURITY_API_ENDPOINT: ${{ secrets.MODEL_SECURITY_API_ENDPOINT }}
+      MODEL_SECURITY_CLIENT_ID: ${{ secrets.MODEL_SECURITY_CLIENT_ID }}
+      MODEL_SECURITY_CLIENT_SECRET: ${{ secrets.MODEL_SECURITY_CLIENT_SECRET }}
+      TSG_ID: ${{ secrets.TSG_ID }}
+
     steps:
       - name: 📦 Checkout Repository
         uses: actions/checkout@v4
@@ -25,19 +32,36 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: 🛠️ Install Dependencies
-        # Since you don't have a requirements.txt, we install directly here
+      - name: 🛠️ Install Dependencies (Dynamic Auth)
         run: |
+          # 1. Install jq (used by your script to parse JSON)
+          # GitHub runners usually have it, but this ensures it.
+          sudo apt-get install -y jq
+
+          # 2. Make your script executable
+          chmod +x getPYPIurl.sh
+
+          # 3. Execute the script to get the URL
+          # It automatically reads the env vars defined at the job level above
+          echo "Authenticating to fetch PyPI URL..."
+          PIP_INDEX_LINK=$(./getPYPIurl.sh)
+
+          # Check if we actually got a URL back
+          if [ -z "$PIP_INDEX_LINK" ]; then
+            echo "::error::Failed to retrieve PyPI URL from getPYPIurl.sh"
+            exit 1
+          fi
+
+          # 4. Install the client using the dynamic URL
+          echo "Installing model-security-client..."
           pip install --upgrade pip
-          pip install pan-modelsecurity
+          pip install model-security-client --extra-index-url "$PIP_INDEX_LINK"
+
+          # 5. Install other dependencies if needed
+          # (If your python script relies on other libs, install them here)
+          # pip install requests 
 
       - name: 🛡️ Run Prisma AIRS Scan
-        # THIS IS THE MISSING PART: Mapping your secrets to Environment Variables
-        env:
-          MODEL_SECURITY_API_ENDPOINT: ${{ secrets.MODEL_SECURITY_API_ENDPOINT }}
-          MODEL_SECURITY_CLIENT_ID: ${{ secrets.MODEL_SECURITY_CLIENT_ID }}
-          MODEL_SECURITY_CLIENT_SECRET: ${{ secrets.MODEL_SECURITY_CLIENT_SECRET }}
-          TSG_ID: ${{ secrets.TSG_ID }}
         run: |
           python model_scan.py \
             --model-path "${{ inputs.model_url }}" \
