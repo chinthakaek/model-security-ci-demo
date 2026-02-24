@@ -7,6 +7,7 @@
 ```bash
    git clone [https://github.com/chinthakaek/model-security-ci-demo.git](https://github.com/chinthakaek/model-security-ci-demo.git)
    cd model-security-ci-demo
+```
 
 **2. Add Secrets and Variables** Add the following under **Repository secrets** to provide the credentials for Prisma AIRS Model Scanning:
 * `MODEL_SECURITY_API_ENDPOINT`
