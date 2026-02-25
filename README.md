@@ -4,10 +4,7 @@
 
 **1. Clone the Repo**
 
-```bash
-   git clone [https://github.com/chinthakaek/model-security-ci-demo.git](https://github.com/chinthakaek/model-security-ci-demo.git)
-   cd model-security-ci-demo
-```
+Copy the files in the repo to your own repo
 
 **2. Add Secrets and Variables** Add the following under **Repository secrets** to provide the credentials for Prisma AIRS Model Scanning:
 * `MODEL_SECURITY_API_ENDPOINT`
